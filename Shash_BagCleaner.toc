@@ -1,0 +1,7 @@
+## Interface: 30300
+## Title: Shash_BagCleaner
+## Notes: Deletes junk items worth 5 silver or less.
+## Author: Shashakar
+## Version: 1.0
+
+Shash_BagCleaner.lua
