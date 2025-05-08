@@ -4,6 +4,14 @@ local frame = CreateFrame("Frame")
 -- Config
 local DELETE_LIMIT = 5 * 100 -- 5 silver in copper
 local pendingItems = {}
+
+-- Default config
+local defaultDB = {
+    deleteLimit = 500,
+    qualities = { [0] = true, [1] = false, [2] = false, [3] = false, [4] = false, [5] = false },
+    ignored = {}
+}
+
 local selectedQualities = {
     [0] = true,  -- Junk
     [1] = false, -- Common
@@ -39,6 +47,35 @@ end
 
 local function shouldDeleteItem(quality, vendorValue, itemID)
     return selectedQualities[quality] and not ignoredItems[itemID] and vendorValue > 0 and vendorValue <= DELETE_LIMIT
+end
+
+local function getCoinTextureString(copper)
+    local gold = math.floor(copper / 10000)
+    local silver = math.floor((copper % 10000) / 100)
+    local copperOnly = copper % 100
+
+    local text = ""
+    if gold > 0 then
+        text = text .. gold .. "|TInterface\\MoneyFrame\\UI-GoldIcon:12:12:2:0|t "
+    end
+    if silver > 0 or gold > 0 then
+        text = text .. silver .. "|TInterface\\MoneyFrame\\UI-SilverIcon:12:12:2:0|t "
+    end
+    text = text .. copperOnly .. "|TInterface\\MoneyFrame\\UI-CopperIcon:12:12:2:0|t"
+
+    return text
+end
+
+local function getQualityStringFromInt(quality)
+    local qualityStrings = {
+        [0] = "Junk",
+        [1] = "Common",
+        [2] = "Uncommon",
+        [3] = "Rare",
+        [4] = "Epic",
+        [5] = "Legendary"
+    }
+    return qualityStrings[quality] or "Unknown"
 end
 
 local function scanBags()
@@ -78,7 +115,7 @@ local function listItems()
     end
     print("|cffffd000[Shash_BagCleaner]|r Items marked for deletion:")
     for _, item in ipairs(pendingItems) do
-        print(string.format(" - %sx%d (worth %d copper, quality %d)", item.link, item.count, item.totalValue, item.quality or -1))
+        print(string.format(" - %sx%d (worth %s, %s quality)", item.link, item.count, getCoinTextureString(item.totalValue), getQualityStringFromInt(item.quality)))
     end
 end
 
@@ -131,6 +168,24 @@ end
 
 frame:RegisterEvent("PLAYER_ENTERING_WORLD")
 
+frame:SetScript("OnEvent", function()
+    -- Initialize DB
+    if not Shash_BagCleanerDB then Shash_BagCleanerDB = {} end
+
+    -- Apply defaults
+    for key, value in pairs(defaultDB) do
+        if Shash_BagCleanerDB[key] == nil then
+            Shash_BagCleanerDB[key] = value
+        end
+    end
+
+    -- Bind runtime values
+    DELETE_LIMIT = Shash_BagCleanerDB.deleteLimit
+    selectedQualities = Shash_BagCleanerDB.qualities
+    ignoredItems = Shash_BagCleanerDB.ignored
+end)
+
+
 -- Settings UI
 local optionsFrame = CreateFrame("Frame", "ShashBagCleanerOptions", UIParent)
 optionsFrame:SetSize(260, 240)
@@ -175,6 +230,7 @@ for i = 0, 5 do
     cb.text:SetText(qualityLabels[i + 1] or tostring(i))
     cb:SetScript("OnClick", function(self)
         selectedQualities[i] = self:GetChecked()
+        Shash_BagCleanerDB.qualities[i] = self:GetChecked() -- ✅ Persist
     end)
 end
 
@@ -187,6 +243,7 @@ saveButton:SetScript("OnClick", function()
     local silver = tonumber(silverInput:GetText())
     if silver and silver > 0 then
         DELETE_LIMIT = silver * 100
+        Shash_BagCleanerDB.deleteLimit = DELETE_LIMIT  -- ✅ Save to DB
         print(string.format("|cff00ff00[Shash_BagCleaner]|r Delete limit updated to %d silver (%d copper)", silver, DELETE_LIMIT))
         optionsFrame:Hide()
     else
@@ -216,12 +273,14 @@ SlashCmdList["BAGCLEAN"] = function(msg)
         local id = tonumber(param) or getItemID(param)
         if id then
             ignoredItems[id] = true
+            Shash_BagCleanerDB.ignored[id] = true -- ✅ Save ignore
             print(string.format("|cffff8800[Shash_BagCleaner]|r Item %d added to ignore list.", id))
         end
     elseif command == "unignore" and param then
         local id = tonumber(param) or getItemID(param)
         if id and ignoredItems[id] then
             ignoredItems[id] = nil
+            Shash_BagCleanerDB.ignored[id] = nil -- ✅ Remove from saved ignore
             print(string.format("|cff88ff88[Shash_BagCleaner]|r Item %d removed from ignore list.", id))
         end
     else

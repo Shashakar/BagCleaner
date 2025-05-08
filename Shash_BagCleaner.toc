@@ -3,5 +3,6 @@
 ## Notes: Deletes junk items worth 5 silver or less.
 ## Author: Shashakar
 ## Version: 1.0
+## SavedVariables: Shash_BagCleanerDB
 
 Shash_BagCleaner.lua
